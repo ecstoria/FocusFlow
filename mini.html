@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>FocusFlow Mini</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    /* Mini-specific overrides — transparent window, self-contained sizing */
+    html, body {
+      background: transparent !important;
+      overflow: hidden !important;
+      user-select: none !important;
+      height: 160px !important;
+      width: 160px !important;
+      min-height: 0 !important;
+      max-height: 160px !important;
+      min-width: 0 !important;
+      max-width: 160px !important;
+    }
+    body {
+      display: block !important;
+      flex-direction: unset !important;
+    }
+    .mini-container {
+      width: 160px;
+      height: 160px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      cursor: pointer;
+    }
+    .mini-ring {
+      position: absolute;
+      width: 140px;
+      height: 140px;
+    }
+    .mini-ring svg {
+      width: 140px;
+      height: 140px;
+      transform: rotate(-90deg);
+    }
+    .mini-ring .ring-bg {
+      fill: none;
+      stroke: var(--color-accent-muted);
+      stroke-width: 2;
+    }
+    .mini-ring .ring-fill {
+      fill: none;
+      stroke: var(--color-accent-ring);
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-dasharray: 408;
+      stroke-dashoffset: 408;
+      transition: stroke-dashoffset 0.5s linear;
+      opacity: 0.6;
+    }
+    .mini-inner {
+      position: relative;
+      z-index: 2;
+      text-align: center;
+    }
+    .mini-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--color-accent);
+      margin: 0 auto 8px;
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.3; transform: scale(0.7); }
+    }
+    .mini-time {
+      font-family: 'Inter', 'Segoe UI', sans-serif;
+      font-size: 22px;
+      font-weight: 300;
+      color: var(--color-text-primary);
+      letter-spacing: -0.5px;
+      line-height: 1;
+    }
+    .mini-time .sep {
+      color: var(--color-text-muted);
+      margin: 0 1px;
+    }
+    .mini-status {
+      font-family: 'Inter', 'Segoe UI', sans-serif;
+      font-size: 9px;
+      color: var(--color-text-muted);
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      margin-top: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div class="mini-container" id="miniContainer">
+    <div class="mini-ring">
+      <svg viewBox="0 0 140 140">
+        <circle class="ring-bg" cx="70" cy="70" r="65"/>
+        <circle class="ring-fill" id="miniFill" cx="70" cy="70" r="65"/>
+      </svg>
+    </div>
+    <div class="mini-inner">
+      <div class="mini-dot"></div>
+      <div class="mini-time">
+        <span id="mH">00</span><span class="sep">:</span><span id="mM">00</span><span class="sep">:</span><span id="mS">00</span>
+      </div>
+      <div class="mini-status">focusing</div>
+    </div>
+  </div>
+
+  <script>
+    
+    const mH = document.getElementById('mH');
+    const mM = document.getElementById('mM');
+    const mS = document.getElementById('mS');
+    const miniFill = document.getElementById('miniFill');
+    const container = document.getElementById('miniContainer');
+    const miniStatus = document.querySelector('.mini-status');
+    const CIRCUMFERENCE = 2 * Math.PI * 65; // ~408
+
+    // Apply theme from main process
+    window.electronAPI.on('apply-theme', (data) => {
+      if (data.theme) document.body.setAttribute('data-theme', data.theme);
+      if (data.accent && data.accent !== 'white') {
+        document.body.setAttribute('data-accent', data.accent);
+      } else {
+        document.body.removeAttribute('data-accent');
+      }
+    });
+
+    window.electronAPI.on('update-time', (data) => {
+      const parts = data.time.split(':');
+      if (parts.length === 3) {
+        mH.textContent = parts[0];
+        mM.textContent = parts[1];
+        mS.textContent = parts[2];
+      }
+      // Update ring
+      const offset = CIRCUMFERENCE * (1 - data.progress);
+      miniFill.style.strokeDashoffset = offset;
+      // Update status text if provided
+      if (data.status) miniStatus.textContent = data.status;
+    });
+
+    // Drag support — distinguish click (<5px displacement) from drag
+    // Uses absolute screen coordinates to avoid DPI issues across monitors
+    let isDragging = false;
+    let mouseStartX = 0;
+    let mouseStartY = 0;
+    let winStartX = 0;
+    let winStartY = 0;
+    const DRAG_THRESHOLD = 5;
+
+    container.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      isDragging = false;
+      mouseStartX = e.screenX;
+      mouseStartY = e.screenY;
+
+      // Get initial window position from main process
+      window.electronAPI.send('mini-drag-start');
+
+      const onMouseMove = (moveEvent) => {
+        const totalDx = moveEvent.screenX - mouseStartX;
+        const totalDy = moveEvent.screenY - mouseStartY;
+
+        if (!isDragging && (Math.abs(totalDx) > DRAG_THRESHOLD || Math.abs(totalDy) > DRAG_THRESHOLD)) {
+          isDragging = true;
+        }
+
+        if (isDragging) {
+          // Send absolute target position instead of delta
+          window.electronAPI.send('mini-dragging', {
+            x: winStartX + totalDx,
+            y: winStartY + totalDy,
+          });
+        }
+      };
+
+      const onMouseUp = () => {
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+
+        if (isDragging) {
+          // Tell main process to save current window position
+          window.electronAPI.send('mini-drag-end');
+        } else {
+          // Click — restore main window
+          window.electronAPI.send('restore-main');
+        }
+      };
+
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    });
+
+    // Receive initial window position for drag calculation
+    window.electronAPI.on('mini-drag-start-pos', (pos) => {
+      winStartX = pos.x;
+      winStartY = pos.y;
+    });
+
+    container.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      window.electronAPI.send('show-mini-context-menu');
+    });
+  </script>
+</body>
+</html>
