@@ -135,6 +135,14 @@
   --color-accent-text: #0a0a0a;
 }
 
+[data-accent="lime"] {
+  --color-accent: #e8ff47;
+  --color-accent-hover: #d8ef37;
+  --color-accent-muted: rgba(232,255,71,0.15);
+  --color-accent-ring: #e8ff47;
+  --color-accent-text: #0a0a0a;
+}
+
 /* ============ RESET & BASE ============ */
 
 * { margin: 0; padding: 0; box-sizing: border-box; }

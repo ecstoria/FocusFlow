@@ -178,10 +178,9 @@
       margin-bottom: 28px;
     }
     .hero-title .line2 { color: var(--accent); display: block; }
-    .hero-title .line3 { 
+    .hero-title .line3 {
       display: block;
-      -webkit-text-stroke: 1px rgba(240,237,232,0.4);
-      color: transparent;
+      color: rgba(240,237,232,0.25);
     }
 
     .hero-sub {
@@ -480,8 +479,7 @@
       letter-spacing: 0.02em;
     }
     .section-title .outline {
-      -webkit-text-stroke: 1px rgba(240,237,232,0.3);
-      color: transparent;
+      color: rgba(240,237,232,0.2);
     }
 
     .features-grid {
@@ -953,8 +951,8 @@
   <nav>
     <a class="nav-logo" href="#"><span>Focus</span>Flow</a>
     <div class="nav-cta">
-      <a href="https://www.buymeacoffee.com/" class="btn-coffee" target="_blank">
-        ☕ Buy me a coffee
+      <a href="https://ecstoria.gumroad.com/l/uiomcc" class="btn-coffee" target="_blank">
+        Support FocusFlow
       </a>
       <a href="#feedback" class="btn-coffee">Feedback</a>
       <a href="#download" class="btn-download-nav">
@@ -1181,15 +1179,15 @@
     <div class="free-kicker reveal">No catch. No subscription. No account.</div>
     <h2 class="free-title reveal reveal-delay-1">IT'S FREE.<br>JUST TAKE IT.</h2>
     <p class="free-subtitle reveal reveal-delay-2">
-      FocusFlow is <strong>completely free</strong>. If it helps you get more done, you can buy me a coffee. Or don't. Either way, enjoy.
+      FocusFlow is <strong>completely free</strong>. If it helps you get more done, pay what you want — or nothing at all. Either way, enjoy.
     </p>
     <div class="free-actions reveal reveal-delay-3">
-      <a href="#" class="btn-big">
+      <a href="https://ecstoria.gumroad.com/l/uiomcc" class="btn-big" target="_blank">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         Download for Windows
       </a>
-      <a href="https://www.buymeacoffee.com/" class="btn-coffee-big" target="_blank">
-        ☕ Buy me a coffee
+      <a href="https://ecstoria.gumroad.com/l/uiomcc" class="btn-coffee-big" target="_blank">
+        Support FocusFlow
       </a>
     </div>
     <div class="free-note reveal reveal-delay-4">v3.0.0 · Windows 10/11 · 64-bit · ~80MB installer</div>
@@ -1250,7 +1248,6 @@
       <a href="#features">Features</a>
       <a href="#download">Download</a>
       <a href="#feedback">Feedback</a>
-      <a href="https://www.buymeacoffee.com/" target="_blank">Support</a>
     </div>
   </footer>
 
@@ -1312,8 +1309,8 @@
     // Feedback form
     // NOTE: Replace the fetch URL with your own form backend.
     // Free options: Formspree (formspree.io), Web3Forms, EmailJS
-    // Example with Formspree: https://formspree.io/f/YOUR_FORM_ID
-    const FORM_ENDPOINT = 'https://formspree.io/f/YOUR_FORM_ID';
+    // Example with Formspree: https://formspree.io/f/mlgwlowj
+    const FORM_ENDPOINT = 'https://formspree.io/f/mlgwlowj';
 
     document.getElementById('feedbackSubmit').addEventListener('click', async () => {
       const type = document.getElementById('feedbackType').value;
