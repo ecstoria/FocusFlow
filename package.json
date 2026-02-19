@@ -1,0 +1,58 @@
+{
+  "name": "focusflow",
+  "version": "3.0.5",
+  "description": "FocusFlow — Find Focus. Feel Flow.",
+  "main": "main.js",
+  "author": "FocusFlow",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win",
+    "release": "electron-builder --win --publish always && gh release edit v%npm_package_version% --draft=false --repo ecstoria/FocusFlow"
+  },
+  "build": {
+    "appId": "com.focusflow.app",
+    "productName": "FocusFlow",
+    "publish": {
+      "provider": "github",
+      "owner": "ecstoria",
+      "repo": "FocusFlow"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "FocusFlow"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "mini.html",
+      "styles.css",
+      "renderer.js",
+      "icon.png",
+      "icon.ico",
+      "tray-icon.png",
+      "node_modules/chart.js/**/*",
+      "node_modules/electron-updater/**/*"
+    ]
+  },
+  "dependencies": {
+    "chart.js": "^4.5.1",
+    "electron-updater": "^6.3.9"
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^26.7.0"
+  }
+}
