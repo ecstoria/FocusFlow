@@ -28,6 +28,11 @@ const SEND_CHANNELS = [
   'mini-dragging',
   'mini-drag-end',
   'install-update',
+  'start-main-timer',
+  'pause-main-timer',
+  'resume-main-timer',
+  'stop-main-timer',
+  'update-main-timer-status',
 ];
 
 // Whitelist of channels renderer can RECEIVE from main
@@ -43,6 +48,7 @@ const RECEIVE_CHANNELS = [
   'mini-drag-start-pos',
   'update-available',
   'update-downloaded',
+  'main-tick',
 ];
 
 // Whitelist of invoke channels (two-way async)

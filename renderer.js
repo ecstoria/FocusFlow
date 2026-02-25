@@ -1,6 +1,12 @@
 
 // Chart.js is loaded via CDN script tag in index.html
 
+// Returns local date as YYYY-MM-DD — avoids UTC offset bugs from toISOString()
+function getLocalDateStr(date) {
+  const d = date || new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 // ============ DEFAULT SETTINGS ============
 
 const DEFAULT_SETTINGS = {
@@ -107,7 +113,7 @@ document.getElementById('tbClose').addEventListener('click', () => window.electr
 
 // ============ STATE ============
 
-let totalSeconds = 25 * 60;
+let totalSeconds = 90 * 60;
 let remainingSeconds = totalSeconds;
 let timerInterval = null;
 let isRunning = false;
@@ -122,7 +128,7 @@ let pendingNotesSessionIndex = -1;
 // Break timer state
 let isBreakMode = false;
 let pomodoroCount = 0;
-let lastFocusDuration = 25 * 60; // Remember focus duration for break→focus repeat cycle
+let lastFocusDuration = 90 * 60; // Remember focus duration for break→focus repeat cycle
 
 // Ring circumference for progress
 const RING_CIRCUMFERENCE = 2 * Math.PI * 88; // ~553
@@ -165,7 +171,7 @@ async function saveAppData() {
 function addSession(duration, label) {
   const now = new Date();
   const session = {
-    date: now.toISOString().split('T')[0],
+    date: getLocalDateStr(now),
     start: new Date(now.getTime() - duration * 1000).toISOString(),
     end: now.toISOString(),
     duration: duration,
@@ -253,7 +259,7 @@ function updateDisplay() {
 }
 
 function updateStats() {
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalDateStr();
   const todaySessions = appData.sessions.filter(s => s.date === today);
   const todaySecs = todaySessions.reduce((a, s) => a + s.duration, 0);
 
@@ -314,11 +320,9 @@ function startTimer() {
   pauseBtnText.textContent = 'Pause';
   pauseIcon.innerHTML = '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>';
 
-  timerInterval = setInterval(() => {
-    remainingSeconds--;
-    updateDisplay();
-    if (remainingSeconds <= 0) timerFinished();
-  }, 1000);
+  // Delegate timer to main process (Node.js) — immune to Chromium throttling
+  const status = isBreakMode ? 'break' : 'focusing';
+  window.electronAPI.send('start-main-timer', { remaining: remainingSeconds, total: totalSeconds, status });
 }
 
 function pauseTimer() {
@@ -330,15 +334,11 @@ function pauseTimer() {
     timerStatus.textContent = isBreakMode ? 'break' : 'focusing';
     pauseBtnText.textContent = 'Pause';
     pauseIcon.innerHTML = '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>';
-    timerInterval = setInterval(() => {
-      remainingSeconds--;
-      updateDisplay();
-      if (remainingSeconds <= 0) timerFinished();
-    }, 1000);
+    const status = isBreakMode ? 'break' : 'focusing';
+    window.electronAPI.send('resume-main-timer', { remaining: remainingSeconds, total: totalSeconds, status });
   } else {
     isPaused = true;
-    clearInterval(timerInterval);
-    timerInterval = null;
+    window.electronAPI.send('pause-main-timer');
     timeDisplay.className = 'time-display paused';
     timerStatus.textContent = 'paused';
     pauseBtnText.textContent = 'Resume';
@@ -349,6 +349,7 @@ function pauseTimer() {
 function stopTimer() {
   clearInterval(timerInterval);
   timerInterval = null;
+  window.electronAPI.send('stop-main-timer');
   isRunning = false;
   isPaused = false;
   window.electronAPI.send('timer-state-changed', false);
@@ -602,7 +603,17 @@ function showDropdown() {
     taskDropdown.classList.remove('visible');
     return;
   }
-  taskDropdown.innerHTML = filtered.map(l =>
+  // Sort by most recently used label first
+  const labelLastUsed = {};
+  appData.sessions.forEach(s => {
+    if (s.label && (!labelLastUsed[s.label] || s.date > labelLastUsed[s.label])) {
+      labelLastUsed[s.label] = s.date;
+    }
+  });
+  const sorted = filtered.sort((a, b) =>
+    (labelLastUsed[b] || '') > (labelLastUsed[a] || '') ? 1 : -1
+  );
+  taskDropdown.innerHTML = sorted.map(l =>
     `<div class="task-dropdown-item">${l}</div>`
   ).join('');
   taskDropdown.classList.add('visible');
@@ -915,7 +926,7 @@ function initSettingsBindings() {
 
 function refreshDashboard() {
   const now = new Date();
-  const today = now.toISOString().split('T')[0];
+  const today = getLocalDateStr(now);
 
   // Week start (Monday)
   const dayOfWeek = now.getDay();
@@ -1028,6 +1039,8 @@ function renderSessionHistory() {
       const idx = parseInt(btn.dataset.index);
       if (idx >= 0 && idx < appData.sessions.length) {
         appData.sessions.splice(idx, 1);
+        // Rebuild labels from remaining sessions so deleted session labels don't linger in dropdown
+        appData.labels = [...new Set(appData.sessions.map(s => s.label).filter(Boolean))];
         saveAppData();
         updateStats();
         refreshDashboard();
@@ -1127,7 +1140,7 @@ function getChartData(range) {
     for (let i = 13; i >= 0; i--) {
       const d = new Date(now);
       d.setDate(d.getDate() - i);
-      const key = d.toISOString().split('T')[0];
+      const key = getLocalDateStr(d);
       const dayLabel = d.toLocaleDateString('en', { weekday: 'short', day: 'numeric' });
       labels.push(dayLabel);
       const secs = appData.sessions.filter(s => s.date === key).reduce((a, s) => a + s.duration, 0);
@@ -1139,8 +1152,8 @@ function getChartData(range) {
       weekEnd.setDate(weekEnd.getDate() - i * 7);
       const weekStart = new Date(weekEnd);
       weekStart.setDate(weekStart.getDate() - 6);
-      const startStr = weekStart.toISOString().split('T')[0];
-      const endStr = weekEnd.toISOString().split('T')[0];
+      const startStr = getLocalDateStr(weekStart);
+      const endStr = getLocalDateStr(weekEnd);
       labels.push(`W${12 - i}`);
       const secs = appData.sessions.filter(s => s.date >= startStr && s.date <= endStr).reduce((a, s) => a + s.duration, 0);
       data.push(secs / 3600);
@@ -1196,6 +1209,7 @@ exportCsvBtn.addEventListener('click', async () => {
 
 const MOTIVATIONAL_QUOTES = [
   '"The secret of getting ahead is getting started." — Mark Twain',
+  '"If you do not direct your attention, it will be directed for you." — Naval Ravikant',
   '"Focus is not about saying yes. It\'s about saying no." — Steve Jobs',
   '"It is during our darkest moments that we must focus to see the light." — Aristotle',
   '"Concentrate all your thoughts upon the work at hand." — Alexander Graham Bell',
@@ -1229,7 +1243,7 @@ const MOTIVATIONAL_QUOTES = [
 
 function refreshGoals() {
   const now = new Date();
-  const today = now.toISOString().split('T')[0];
+  const today = getLocalDateStr(now);
 
   // Week boundaries (Monday–Sunday)
   const dayOfWeek = now.getDay();
@@ -1259,7 +1273,7 @@ function refreshGoals() {
   const checkDate = new Date(now);
   checkDate.setHours(0, 0, 0, 0);
   for (let i = 0; i < 365; i++) {
-    const dateStr = checkDate.toISOString().split('T')[0];
+    const dateStr = getLocalDateStr(checkDate);
     const daySecs = appData.sessions.filter(s => s.date === dateStr).reduce((a, s) => a + s.duration, 0);
     if (daySecs / 3600 >= dailyGoal) {
       streak++;
@@ -1334,7 +1348,7 @@ function refreshGoals() {
   renderHeatmap();
 
   // Daily quote
-  const dayIndex = Math.floor(Date.now() / 86400000) % MOTIVATIONAL_QUOTES.length;
+  const dayIndex = (parseInt(today.replace(/-/g, '')) ) % MOTIVATIONAL_QUOTES.length;
   document.getElementById('dailyQuoteText').textContent = MOTIVATIONAL_QUOTES[dayIndex];
 }
 
@@ -1381,6 +1395,25 @@ function renderHeatmap() {
     cursor.setDate(cursor.getDate() + 1);
   }
 }
+
+// ============ MAIN-PROCESS TIMER TICK ============
+// The timer runs in main.js (Node.js) to avoid Chromium throttling.
+// Each tick updates remainingSeconds and redraws the display.
+window.electronAPI.on('main-tick', (data) => {
+  const parts = data.time.split(':');
+  if (parts.length === 3) {
+    remainingSeconds = parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(parts[2]);
+  }
+  // Update display elements directly
+  hoursEl.textContent = parts[0];
+  minutesEl.textContent = parts[1];
+  secondsEl.textContent = parts[2];
+  if (totalSeconds > 0) {
+    const offset = RING_CIRCUMFERENCE * (1 - data.progress);
+    ringProgress.style.strokeDashoffset = offset;
+  }
+  if (remainingSeconds <= 0 && isRunning) timerFinished();
+});
 
 // ============ AUTO-UPDATER ============
 
@@ -1438,4 +1471,8 @@ initSettingsBindings();
 loadAppData().then(() => {
   updateDisplay();
   ringProgress.style.strokeDashoffset = RING_CIRCUMFERENCE;
+  // Highlight the 90m preset as active on launch
+  presetBtns.forEach(b => {
+    b.classList.toggle('active', b.dataset.minutes === '90');
+  });
 });

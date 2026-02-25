@@ -272,8 +272,13 @@ function destroyTray() {
 
 function switchToMiniMode() {
   if (!mainWindow) return;
-  // skipTaskbar is already set by timer-state-changed handler
-  mainWindow.hide();
+  // Save position before moving off-screen
+  const [x, y] = mainWindow.getPosition();
+  mainWindow._savedX = x;
+  mainWindow._savedY = y;
+  // Move off-screen instead of hiding — keeps Chromium active so setInterval
+  // is never throttled (hidden windows get throttled after ~1 minute)
+  mainWindow.setPosition(-32000, -32000);
   if (mainWindow.isMinimized()) {
     mainWindow.restore();
   }
@@ -292,6 +297,14 @@ function restoreMainWindow() {
     // native minimize via taskbar click (causes Chromium freeze).
     if (!isTimerRunning) {
       mainWindow.setSkipTaskbar(false);
+    }
+    // Restore saved position (window was moved off-screen, not hidden)
+    if (mainWindow._savedX !== undefined) {
+      mainWindow.setPosition(mainWindow._savedX, mainWindow._savedY);
+      mainWindow._savedX = undefined;
+      mainWindow._savedY = undefined;
+    } else {
+      mainWindow.center();
     }
     // Ensure clean state: restore if minimized, show if hidden
     if (mainWindow.isMinimized()) {
@@ -363,6 +376,85 @@ ipcMain.on('set-always-on-top', (event, value) => {
       miniWindow.setAlwaysOnTop(false);
     }
   }
+});
+
+// ─── Main-process timer engine ────────────────────────────────────────────────
+// Runs in Node.js — immune to Chromium throttling that affects renderer timers.
+let mainTimerInterval = null;
+let mainTimerRemaining = 0;
+let mainTimerTotal = 0;
+let mainTimerStartTime = null;
+let mainTimerStartRemaining = 0;
+let mainTimerStatus = 'focusing';
+
+function formatMainTime(secs) {
+  const h = String(Math.floor(secs / 3600)).padStart(2, '0');
+  const m = String(Math.floor((secs % 3600) / 60)).padStart(2, '0');
+  const s = String(secs % 60).padStart(2, '0');
+  return { h, m, s };
+}
+
+function sendTimerTick() {
+  const t = formatMainTime(mainTimerRemaining);
+  const progress = mainTimerTotal > 0 ? (mainTimerTotal - mainTimerRemaining) / mainTimerTotal : 0;
+  const data = { time: `${t.h}:${t.m}:${t.s}`, progress, status: mainTimerStatus };
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('main-tick', data);
+  if (miniWindow && !miniWindow.isDestroyed()) miniWindow.webContents.send('update-time', data);
+}
+
+ipcMain.on('start-main-timer', (event, { remaining, total, status }) => {
+  if (mainTimerInterval) clearInterval(mainTimerInterval);
+  mainTimerRemaining = remaining;
+  mainTimerTotal = total;
+  mainTimerStatus = status || 'focusing';
+  mainTimerStartTime = Date.now();
+  mainTimerStartRemaining = remaining;
+  mainTimerInterval = setInterval(() => {
+    const elapsed = Math.floor((Date.now() - mainTimerStartTime) / 1000);
+    mainTimerRemaining = Math.max(0, mainTimerStartRemaining - elapsed);
+    sendTimerTick();
+    if (mainTimerRemaining <= 0) {
+      clearInterval(mainTimerInterval);
+      mainTimerInterval = null;
+    }
+  }, 500);
+});
+
+ipcMain.on('pause-main-timer', () => {
+  if (mainTimerInterval) {
+    clearInterval(mainTimerInterval);
+    mainTimerInterval = null;
+  }
+});
+
+ipcMain.on('resume-main-timer', (event, { remaining, total, status }) => {
+  if (mainTimerInterval) clearInterval(mainTimerInterval);
+  mainTimerRemaining = remaining;
+  mainTimerTotal = total;
+  mainTimerStatus = status || 'focusing';
+  mainTimerStartTime = Date.now();
+  mainTimerStartRemaining = remaining;
+  mainTimerInterval = setInterval(() => {
+    const elapsed = Math.floor((Date.now() - mainTimerStartTime) / 1000);
+    mainTimerRemaining = Math.max(0, mainTimerStartRemaining - elapsed);
+    sendTimerTick();
+    if (mainTimerRemaining <= 0) {
+      clearInterval(mainTimerInterval);
+      mainTimerInterval = null;
+    }
+  }, 500);
+});
+
+ipcMain.on('stop-main-timer', () => {
+  if (mainTimerInterval) {
+    clearInterval(mainTimerInterval);
+    mainTimerInterval = null;
+  }
+  mainTimerRemaining = 0;
+});
+
+ipcMain.on('update-main-timer-status', (event, status) => {
+  mainTimerStatus = status;
 });
 
 ipcMain.on('timer-finished', (event, label) => {
