@@ -68,6 +68,7 @@ if (!gotTheLock) {
 // Data file path
 const dataDir = path.join(app.getPath('userData'));
 const dataFile = path.join(dataDir, 'focusflow-data.json');
+const checkpointFile = path.join(dataDir, 'session-checkpoint.json');
 
 function loadData() {
   try {
@@ -86,6 +87,14 @@ function saveData(data) {
   } catch (e) {
     console.warn('Failed to save data:', e);
   }
+}
+
+function writeCheckpoint(data) {
+  try { fs.writeFileSync(checkpointFile, JSON.stringify(data), 'utf8'); } catch (e) {}
+}
+
+function clearCheckpoint() {
+  try { if (fs.existsSync(checkpointFile)) fs.unlinkSync(checkpointFile); } catch (e) {}
 }
 
 // Window size constants
@@ -346,6 +355,14 @@ app.on('will-quit', () => {
   globalShortcut.unregisterAll();
 });
 
+app.on('before-quit', () => {
+  // Write final checkpoint if timer is running when app is force-closed
+  if (checkpointInterval) { clearInterval(checkpointInterval); checkpointInterval = null; }
+  if (mainTimerInterval) {
+    writeCheckpoint({ startWallClock: new Date().toISOString(), label: mainTimerLabel, totalSeconds: mainTimerTotal, remainingSeconds: mainTimerRemaining, status: mainTimerStatus });
+  }
+});
+
 app.on('window-all-closed', () => {
   app.quit();
 });
@@ -386,6 +403,8 @@ let mainTimerTotal = 0;
 let mainTimerStartTime = null;
 let mainTimerStartRemaining = 0;
 let mainTimerStatus = 'focusing';
+let checkpointInterval = null;
+let mainTimerLabel = '';
 
 function formatMainTime(secs) {
   const h = String(Math.floor(secs / 3600)).padStart(2, '0');
@@ -402,13 +421,19 @@ function sendTimerTick() {
   if (miniWindow && !miniWindow.isDestroyed()) miniWindow.webContents.send('update-time', data);
 }
 
-ipcMain.on('start-main-timer', (event, { remaining, total, status }) => {
+ipcMain.on('start-main-timer', (event, { remaining, total, status, label }) => {
   if (mainTimerInterval) clearInterval(mainTimerInterval);
+  if (checkpointInterval) { clearInterval(checkpointInterval); checkpointInterval = null; }
   mainTimerRemaining = remaining;
   mainTimerTotal = total;
   mainTimerStatus = status || 'focusing';
+  mainTimerLabel = label || '';
   mainTimerStartTime = Date.now();
   mainTimerStartRemaining = remaining;
+  writeCheckpoint({ startWallClock: new Date().toISOString(), label: mainTimerLabel, totalSeconds: mainTimerTotal, remainingSeconds: mainTimerRemaining, status: mainTimerStatus });
+  checkpointInterval = setInterval(() => {
+    writeCheckpoint({ startWallClock: new Date().toISOString(), label: mainTimerLabel, totalSeconds: mainTimerTotal, remainingSeconds: mainTimerRemaining, status: mainTimerStatus });
+  }, 30000);
   mainTimerInterval = setInterval(() => {
     const elapsed = Math.floor((Date.now() - mainTimerStartTime) / 1000);
     mainTimerRemaining = Math.max(0, mainTimerStartRemaining - elapsed);
@@ -425,15 +450,22 @@ ipcMain.on('pause-main-timer', () => {
     clearInterval(mainTimerInterval);
     mainTimerInterval = null;
   }
+  if (checkpointInterval) { clearInterval(checkpointInterval); checkpointInterval = null; }
+  writeCheckpoint({ startWallClock: new Date().toISOString(), label: mainTimerLabel, totalSeconds: mainTimerTotal, remainingSeconds: mainTimerRemaining, status: mainTimerStatus, paused: true });
 });
 
 ipcMain.on('resume-main-timer', (event, { remaining, total, status }) => {
   if (mainTimerInterval) clearInterval(mainTimerInterval);
+  if (checkpointInterval) { clearInterval(checkpointInterval); checkpointInterval = null; }
   mainTimerRemaining = remaining;
   mainTimerTotal = total;
   mainTimerStatus = status || 'focusing';
   mainTimerStartTime = Date.now();
   mainTimerStartRemaining = remaining;
+  writeCheckpoint({ startWallClock: new Date().toISOString(), label: mainTimerLabel, totalSeconds: mainTimerTotal, remainingSeconds: mainTimerRemaining, status: mainTimerStatus });
+  checkpointInterval = setInterval(() => {
+    writeCheckpoint({ startWallClock: new Date().toISOString(), label: mainTimerLabel, totalSeconds: mainTimerTotal, remainingSeconds: mainTimerRemaining, status: mainTimerStatus });
+  }, 30000);
   mainTimerInterval = setInterval(() => {
     const elapsed = Math.floor((Date.now() - mainTimerStartTime) / 1000);
     mainTimerRemaining = Math.max(0, mainTimerStartRemaining - elapsed);
@@ -450,12 +482,26 @@ ipcMain.on('stop-main-timer', () => {
     clearInterval(mainTimerInterval);
     mainTimerInterval = null;
   }
+  if (checkpointInterval) { clearInterval(checkpointInterval); checkpointInterval = null; }
   mainTimerRemaining = 0;
+  clearCheckpoint();
 });
 
 ipcMain.on('update-main-timer-status', (event, status) => {
   mainTimerStatus = status;
 });
+
+// Crash recovery: get any interrupted session from last run
+ipcMain.handle('get-interrupted-session', () => {
+  try {
+    if (fs.existsSync(checkpointFile)) {
+      return JSON.parse(fs.readFileSync(checkpointFile, 'utf8'));
+    }
+  } catch (e) {}
+  return null;
+});
+
+ipcMain.on('clear-checkpoint', () => clearCheckpoint());
 
 ipcMain.on('timer-finished', (event, label) => {
   isTimerRunning = false;

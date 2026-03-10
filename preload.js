@@ -33,6 +33,7 @@ const SEND_CHANNELS = [
   'resume-main-timer',
   'stop-main-timer',
   'update-main-timer-status',
+  'clear-checkpoint',
 ];
 
 // Whitelist of channels renderer can RECEIVE from main
@@ -57,6 +58,7 @@ const INVOKE_CHANNELS = [
   'save-data',
   'get-data-path',
   'export-csv',
+  'get-interrupted-session',
 ];
 
 contextBridge.exposeInMainWorld('electronAPI', {

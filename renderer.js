@@ -100,6 +100,12 @@ const idleModal = document.getElementById('idleModal');
 const idleDismissBtn = document.getElementById('idleDismissBtn');
 const idleResumeBtn = document.getElementById('idleResumeBtn');
 
+// Recovery modal
+const recoveryModal = document.getElementById('recoveryModal');
+const recoveryMessage = document.getElementById('recoveryMessage');
+const recoverySaveBtn = document.getElementById('recoverySaveBtn');
+const recoveryDismissBtn = document.getElementById('recoveryDismissBtn');
+
 // Title bar
 document.getElementById('tbMin').addEventListener('click', () => {
   if (isRunning) {
@@ -322,7 +328,7 @@ function startTimer() {
 
   // Delegate timer to main process (Node.js) — immune to Chromium throttling
   const status = isBreakMode ? 'break' : 'focusing';
-  window.electronAPI.send('start-main-timer', { remaining: remainingSeconds, total: totalSeconds, status });
+  window.electronAPI.send('start-main-timer', { remaining: remainingSeconds, total: totalSeconds, status, label: taskLabelInput.value.trim() });
 }
 
 function pauseTimer() {
@@ -565,6 +571,48 @@ shortcutOverlay.addEventListener('click', (e) => {
 
 function showIdleModal() {
   idleModal.style.display = '';
+}
+
+// ============ CRASH RECOVERY ============
+
+function formatDurationShort(secs) {
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  if (h > 0 && m > 0) return `${h}h ${m}m`;
+  if (h > 0) return `${h}h`;
+  return `${m}m`;
+}
+
+function showRecoveryModal(checkpoint) {
+  const elapsed = checkpoint.totalSeconds - checkpoint.remainingSeconds;
+  const label = checkpoint.label ? ` — ${checkpoint.label}` : '';
+  recoveryMessage.textContent = `Your last session was interrupted. Save ${formatDurationShort(elapsed)} of focused time${label}?`;
+  recoveryModal.style.display = '';
+
+  recoverySaveBtn.onclick = async () => {
+    recoveryModal.style.display = 'none';
+    const now = new Date();
+    const session = {
+      date: getLocalDateStr(now),
+      start: new Date(checkpoint.startWallClock).toISOString(),
+      end: now.toISOString(),
+      duration: elapsed,
+      label: checkpoint.label || '',
+      notes: '',
+    };
+    appData.sessions.push(session);
+    if (checkpoint.label && !appData.labels.includes(checkpoint.label)) {
+      appData.labels.push(checkpoint.label);
+    }
+    await saveAppData();
+    updateStats();
+    window.electronAPI.send('clear-checkpoint');
+  };
+
+  recoveryDismissBtn.onclick = () => {
+    recoveryModal.style.display = 'none';
+    window.electronAPI.send('clear-checkpoint');
+  };
 }
 
 function hideIdleModal() {
@@ -1468,11 +1516,21 @@ window.electronAPI.on('update-downloaded', () => {
 
 initSettingsBindings();
 
-loadAppData().then(() => {
+loadAppData().then(async () => {
   updateDisplay();
   ringProgress.style.strokeDashoffset = RING_CIRCUMFERENCE;
   // Highlight the 90m preset as active on launch
   presetBtns.forEach(b => {
     b.classList.toggle('active', b.dataset.minutes === '90');
   });
+  // Check for interrupted session from unexpected shutdown
+  const interrupted = await window.electronAPI.invoke('get-interrupted-session');
+  if (interrupted) {
+    const elapsed = interrupted.totalSeconds - interrupted.remainingSeconds;
+    if (elapsed >= 60) {
+      showRecoveryModal(interrupted);
+    } else {
+      window.electronAPI.send('clear-checkpoint');
+    }
+  }
 });
