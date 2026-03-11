@@ -383,6 +383,13 @@ ipcMain.on('theme-sync', (event, data) => {
   }
 });
 
+ipcMain.on('set-auto-startup', (event, value) => {
+  // Only applies in packaged app; in dev mode this would register electron.exe
+  if (app.isPackaged) {
+    app.setLoginItemSettings({ openAtLogin: value, name: 'FocusFlow' });
+  }
+});
+
 ipcMain.on('set-always-on-top', (event, value) => {
   isAlwaysOnTop = value;
   if (mainWindow) mainWindow.setAlwaysOnTop(value);

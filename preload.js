@@ -34,6 +34,7 @@ const SEND_CHANNELS = [
   'stop-main-timer',
   'update-main-timer-status',
   'clear-checkpoint',
+  'set-auto-startup',
 ];
 
 // Whitelist of channels renderer can RECEIVE from main

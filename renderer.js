@@ -10,7 +10,7 @@ function getLocalDateStr(date) {
 // ============ DEFAULT SETTINGS ============
 
 const DEFAULT_SETTINGS = {
-  general: { alwaysOnTop: true },
+  general: { alwaysOnTop: true, autoStartup: true },
   timer: {
     breakTimer: {
       enabled: false,
@@ -844,6 +844,7 @@ function applySettings() {
 
   // Always on top
   window.electronAPI.send('set-always-on-top', settings.general.alwaysOnTop);
+  window.electronAPI.send('set-auto-startup', settings.general.autoStartup);
 
   // Break bar visibility
   updateBreakBar();
@@ -861,6 +862,7 @@ function applySettings() {
 function populateSettingsUI() {
   // General
   document.getElementById('settAlwaysOnTop').checked = settings.general.alwaysOnTop;
+  document.getElementById('settAutoStartup').checked = settings.general.autoStartup;
 
   // Timer
   document.getElementById('settBreakTimer').checked = settings.timer.breakTimer.enabled;
@@ -892,6 +894,12 @@ function initSettingsBindings() {
   document.getElementById('settAlwaysOnTop').addEventListener('change', (e) => {
     settings.general.alwaysOnTop = e.target.checked;
     window.electronAPI.send('set-always-on-top', e.target.checked);
+    saveAppData();
+  });
+
+  document.getElementById('settAutoStartup').addEventListener('change', (e) => {
+    settings.general.autoStartup = e.target.checked;
+    window.electronAPI.send('set-auto-startup', e.target.checked);
     saveAppData();
   });
 

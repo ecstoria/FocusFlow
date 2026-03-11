@@ -43,17 +43,26 @@
     .mini-ring .ring-bg {
       fill: none;
       stroke: var(--color-accent-muted);
-      stroke-width: 2;
+      stroke-width: 3;
     }
     .mini-ring .ring-fill {
       fill: none;
       stroke: var(--color-accent-ring);
-      stroke-width: 2;
+      stroke-width: 3;
       stroke-linecap: round;
       stroke-dasharray: 408;
       stroke-dashoffset: 408;
       transition: stroke-dashoffset 0.5s linear;
-      opacity: 0.6;
+      opacity: 0.8;
+    }
+    .mini-backdrop {
+      position: absolute;
+      width: 128px;
+      height: 128px;
+      border-radius: 50%;
+      background: rgba(14, 14, 14, 0.48);
+      top: 16px;
+      left: 16px;
     }
     .mini-inner {
       position: relative;
@@ -76,18 +85,18 @@
       font-family: 'Inter', 'Segoe UI', sans-serif;
       font-size: 22px;
       font-weight: 300;
-      color: var(--color-text-primary);
+      color: #ffffff;
       letter-spacing: -0.5px;
       line-height: 1;
     }
     .mini-time .sep {
-      color: var(--color-text-muted);
+      color: rgba(255, 255, 255, 0.35);
       margin: 0 1px;
     }
     .mini-status {
       font-family: 'Inter', 'Segoe UI', sans-serif;
       font-size: 9px;
-      color: var(--color-text-muted);
+      color: rgba(255, 255, 255, 0.45);
       letter-spacing: 0.15em;
       text-transform: uppercase;
       margin-top: 6px;
@@ -96,6 +105,7 @@
 </head>
 <body>
   <div class="mini-container" id="miniContainer">
+    <div class="mini-backdrop"></div>
     <div class="mini-ring">
       <svg viewBox="0 0 140 140">
         <circle class="ring-bg" cx="70" cy="70" r="65"/>
